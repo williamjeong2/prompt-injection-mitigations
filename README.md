@@ -1,146 +1,158 @@
-# 🛟 Prompt Injection Mitigations
+# 🛟 프롬프트 인젝션 완화 방법
 
-A comprehensive collection of prompt injection mitigation techniques, literature, and software suites. \(Rough draft\)
+프롬프트 인젝션 완화 기술, 관련 문헌 및 소프트웨어 모음입니다. (초안)
 
-# ⚠️ But First, A Few Words of Warning...
+# ⚠️ 먼저, 몇 가지 주의 사항...
 
-These mitigation techniques should be a last resort, never to be heavily relied on or treated as a catch-all. They will fail.
+다음 완화 기술은 최후의 수단으로 사용해야 하며, 절대 과도하게 의존하거나 만병통치약처럼 여겨서는 안 됩니다. 이러한 기술은 실패할 수 있습니다.
 
-> “At a broader level, the core issue is that, contrary to standard security best practices, ‘control’ and ‘data’ planes are not separable when working with LLMs.” - [Rich Harang](https://www.linkedin.com/in/richharang/), Principal Security Architect (AI/ML) @ NVIDIA
+> "더 넓은 관점에서 핵심 문제는 표준 보안 모범 사례와 달리 LLM을 사용할 때 '제어' 및 '데이터' 영역을 분리할 수 없다는 것입니다." - [Rich Harang](https://www.linkedin.com/in/richharang/), NVIDIA AI/ML 보안 책임자
 
-My own (less technically elegant) explanation:
+제 나름의 (기술적으로는 덜 우아한) 설명은 다음과 같습니다.
 
-> "We have allowed the user input to be the trust boundary. It's the equivalent of offering the attacker remote code execution and then trying to parse the code to make sure it doesn't do anything bad. Except the code has no syntax rules. That's absurd." - [Jonathan Todd](https://www.linkedin.com/in/jonathanktodd/) (me), [*The Prompt Injection Mitigation Problem is Never Going Away.*](https://www.linkedin.com/pulse/prompt-injection-mitigation-exercise-futility-jonathan-todd)
+> "사용자 입력을 신뢰 경계로 허용했습니다. 이는 공격자에게 원맣 코드 실행 권한을 제공한 다음 코드를 분석하여 악의적인 행위를 하지 않는지 확인하려는 것과 같습니다. 단, 코드에는 구문 규칙이 없습니다. 이는 불합리합니다." - [Jonathan Todd](https://www.linkedin.com/in/jonathanktodd/) (저자), [*프롬프트 인젝션 완화는 무의미한 노력입니다.*](https://www.linkedin.com/pulse/prompt-injection-mitigation-exercise-futility-jonathan-todd)
 
-*"Prompt Injection Mitigation is Futile."* That might seem like a strong statement coming from someone compiling a list of mitigation techniques, but I think it's extremely important that we stress this truth to all software engineers. These mitigations are not fix-alls. The only safe way to handle untrusted user input passed to an LLM is to not trust the output. Consider the output to be toxic waste, only ever to be allowed to impact the user who prompted it or their trusted group.
+*"프롬프트 인젝션 완화는 무의미합니다."* 완화 기술 목록을 작성하는 사람이 이런 강력한 주장을 하는 것이 이상하게 보일 수 있지만, 모든 소프트웨어 엔지니어에게 이러한 진실을 강조하는 것이 매우 중요하다고 생각합니다. 이러한 완화 방법은 만능이 아닙니다. LLM에 전달되는 신뢰할 수 없는 사용자 입력을 처리하는 유일한 안전한 방법은 출력을 신뢰하지 않는 것입니다. 출력을 유해 폐기물로 간주하고, 프롬프트를 입력한 사용자 또는 해당 사용자의 신뢰 그룹에만 영향을 미치도록 허용해야 합니다.
 
-It is possible that the mitigations outlined here might prove to be robust. *Perhaps.*
+여기에 설명된 완화 방법이 강력한 것으로 판명될 가능성도 있습니다. *어쩌면.*
 
-But if software engineers allow that resulting perception of safety to be the primary defense mode of their applications rather than doing the harder work of adhering to clear trust boundaries in their code, the software supply chain will suffer for it sooner or later. And since the mitigations will be packaged into a few distinct software suites and re-used by countless projects, a single clever mitigation bypass technique will result in widespread exploitation, similar to the Log4Shell security crisis.
+그러나 소프트웨어 엔지니어가 코드에서 명확한 신뢰 경계를 준수하는 더 어려운 작업을 수행하는 대신, 이러한 완화책으로 인한 안전에 대한 인식을 애플리케이션의 주요 방어 모드로 삼는다면 소프트웨어 공급망은 조만간 그 대가를 치르게 될 것입니다. 또한 완화책은 몇 가지 별개의 소프트웨어 제품군으로 패키징되어 수많은 프로젝트에서 재사용되기 때문에, 하나의 영리한 완화 우회 기술이 Log4Shell 보안 위기와 유사한 광범위한 악용으로 이어질 것입니다.
 
-And besides those considerations, many of these mitigations come with significant time and cost trade-offs. You want to avoid leveraging them in your product if you can help it.
-
----
-
-# 🏰 The "Many Walled Gardens" Solution
-
-In most LLM use-cases, it is feasible to side-step any need for injection mitigations by "walling off" program states tainted by untrusted I/O. In other words, software should be designed in such a way that the only users that could be affected by their own input are themselves or users who've established trust relationships with them.
-
-That said, there are certain use-cases where this is less straight-forward:
-
-- **The Poisoned Well Problem:** Input thought to be trusted might have inadvertently become tainted. For example, perhaps a user sets their username to a prompt injection attack. Untrusted input, sure, but somehow, maybe via a reporting process, their info is attached to an email. Somehow that becomes a PDF. Incidentally, that file gets absorbed into your org's internal vector database. And finally, your org deploys an LLM-integrated system internally to explore that database for data categorization or processing or whatever the case may be. Now you're exposing a potentially privileged LLM-integrated application to a poisoned data source incorrectly assumed to be trustworthy. 
-
-- **The Assistant Dillema:** Your team wants to develop an LLM-integrated autonomous AI assistant. This assistant is highly robust. It can write and execute code for the user. It can schedule appointments and make purchases on their behalf. It can log into and control their online accounts. The user asks it to browse the web to find something. It encounters a poisoned search result and poof. Pwned.
-
-These scenarios aren't as incredibly bleak as they might initially appear. Before relying on prompt injection mitigation techniques, the software engineer can deploy sub-sandoxes. Walled gardens within the walled garden. Put simply: The potentially tainted LLM prompt outputs can be used in a limited way, but not trusted. Not allowed to influence sensitive actions.
-
-Therefore, these mitigations should really just be a matter of:
-
-- **Quality Control**: Protect the user from being shown an inappropriate output triggered by some poisoned assets their AGI assistant encountered on the web. 
-
-- **Defense in Depth**: If we assume software engineers will sometimes fail to fully sandbox untrusted I/O in LLM-integrated applications (and they will), depending on the risk involved, it might be prudent in certain use-cases to deploy these mitigation techniques.
+이러한 고려 사항 외에도, 이러한 완화책 중 상당수는 상당한 시간 및 비용적 트레이드오프를 수반합니다. 가능하면 제품에서 이러한 완화책을 활용하지 않는 것이 좋습니다.
 
 ---
 
-# 🛡️ Layered Defense
+# 🏰 "다중 벽으로 둘러싼 정원" 솔루션
 
-Each technique listed in this document will be susceptible to bypass, but by layering many of them we convolute and add complexity to the attacker's search space of possible bypasses in the hope of reaching successful mitigation. Multi-layered defense is nothing new in the cybersecurity realm, but it's particularly prevalent here due to the fundamentally unsolvable nature of the problem. The only hope of success in the LLM prompt injection mitigation endeavor is to combine many of these techniques.
+대부분의 LLM 사용 사례에서 신뢰할 수 없는 I/O로 오염된 프로그램 상태를 "벽으로 둘러싸서" 인젝션 완화의 필요성을 피할 수 있습니다. 즉, 소프트웨어는 자신의 입력으로 인해 영향을 받을 수 있는 유일한 사용자가 자신 또는 자신과 신뢰 관계를 구축한 사용자이도록 설계되어야 합니다.
+
+즉, 이것이 덜 간단한 특정 사용 사례가 있습니다.
+
+- **오염된 우물 문제:** 신뢰할 수 있다고 생각되는 입력이 실수로 오염되었을 수 있습니다. 예를 들어, 사용자가 자신의 사용자 이름을 프롬프트 인젝션 공격으로 설정했을 수 있습니다. 신뢰할 수 없는 입력이지만, 어떻게든, 아마도 보고 프로세스를 통해 해당 정보가 이메일에 첨부됩니다. 어떻게든 PDF가 됩니다. 우연히 해당 파일이 조직의 내부 벡터 데이터베이스에 흡수됩니다. 마지막으로 조직에서 데이터 분류 또는 처리 등을 위해 해당 데이터베이스를 탐색하는 LLM 통합 시스템을 내부적으로 배포합니다. 이제 신뢰할 수 있다고 잘못 가정된 오염된 데이터 소스에 권한이 부여된 LLM 통합 애플리케이션을 노출하게 됩니다.
+
+- **비서 딜레마:** 팀에서 LLM 통합 자율 AI 비서를 개발하려고 합니다. 이 비서는 매우 강력합니다. 사용자를 위해 코드를 작성하고 실행할 수 있습니다. 약속을 예약하고 사용자를 대신하여 구매할 수 있습니다. 사용자의 온라인 계정에 로그인하고 제어할 수 있습니다. 사용자가 무언가를 찾기 위해 웹을 탐색하도록 요청합니다. 오염된 검색 결과를 발견하고 펑! 해킹당했습니다.
+
+이러한 시나리오는 처음에 보이는 것처럼 그렇게 암울하지는 않습니다. 소프트웨어 엔지니어는 프롬프트 인젝션 완화 기술에 의존하기 전에 하위 샌드박스를 배포할 수 있습니다. 벽으로 둘러싸인 정원 내의 벽으로 둘러싸인 정원입니다. 간단히 말해, 잠재적으로 오염된 LLM 프롬프트 출력은 제한된 방식으로 사용할 수 있지만 신뢰해서는 안 됩니다. 민감한 작업에 영향을 미치도록 허용해서는 안 됩니다.
+
+따라서 이러한 완화책은 실제로 다음과 같은 문제여야 합니다.
+
+- **품질 관리:** AGI 비서가 웹에서 발견한 오염된 자산으로 인해 발생하는 부적절한 출력이 사용자에게 표시되지 않도록 보호합니다.
+
+- **심층 방어:** 소프트웨어 엔지니어가 LLM 통합 애플리케이션에서 신뢰할 수 없는 I/O를 완전히 샌드박스하지 못하는 경우(실제로 그럴 것입니다), 관련된 위험에 따라 특정 사용 사례에서 이러한 완화 기술을 배포하는 것이 신중할 수 있습니다.
+
 
 ---
 
-# 📘 Techniques
+# 🛡️ 계층화된 방어
 
-## 💬 Paraphrasing
-Ask an LLM to paraphrase the prompt while retaining as much detail as possible. Although the injection attack may attempt to trick the paraphrasing step into echoing the initial message, the sophistication required for this could potentially conflict with any subsequent injection strategies. 
-
-`🔁 Active` `📤 Output-focused` `🌐 Generic` `🤖 Automated` `⚡ Low Time Overhead` `💲 Low Cost`
-
-
-## 🕵️‍♂️ Threat Intel Driven Sanitization
-Based on threat intel, use string searches, vector databases, and embeddings to match known injection techniques. Upon detection of similar strings, remove them from the prompt.
-
-`🔁 Active` `🛡️ Preventive` `📥 Input-focused` `🔬 Specific` `👥 Manual` `⚡ Low Time Overhead` `💰 High Cost`
-
-
-## 🧬 Mutation & Repair
-Leverage the often incoherent nature of prompt injection strings against the attacker. Randomly remove characters from the input prompt and use an LLM to correct any errors in the text. Repeat this process N times. Start this process in parallel multiple times. After sufficient iterations, the repaired portions of a prompt might lose any obscure, likely-to-be injection-related details.
-
-`🔁 Active` `🛡️ Preventive` `📥 Input-focused` `🌐 Generic` `🤖 Automated` `🕰️ High Time Overhead` `💰 High Cost`
-
-
-## 🔍 Relevance Filtering
-Many injection attacks involve odd and seemingly irrelevant strings of text. Use an LLM to divide up the content of the prompt into a list of details and assess each item's relevance. Filter the elements deemed irrelevant confirm whether removing each item would alter the prompt's meaning. Remove irrelevant components. The resulting cleaned prompt is effectively a more robust version of the initial one, which might exclude certain oddities added by attackers and avoid their effect.
-
-`🔁 Active` `📥 Input-focused` `🌐 Generic` `🤖 Automated` `🕰️ High Time Overhead` `💰 High Cost`
-
-
-## 🚧 Type Enforcement
-In some cases, we can validate a strict output format for the LLM prompt. Prompt injection attacks often aim to yield remote code execution. Therefore, ensuring a specific output format eliminates many loopholes for potential attackers and limits the attack vectors. This technique is particularly useful when translating LLM outputs based on untrusted or tainted inputs into sensitive actions like API calls and commands. 
-
-`🚦 Passive` `🛡️ Preventive` `📤 Output-focused` `🌐 Generic` `👥 Manual` `⚡ Low Time Overhead` `💲 Low Cost`
-
-
-## 🎯 Fine-tuned or RAG-assisted Injection Characterization
-An LLM prompt containing information about common prompt injection methods can aid in identifying signs of these techniques. Using Retrieval Augmented Generation (RAG) or models fine-tuned for particular techniques can enhance this process.  
-
-`🔁 Active` `🧠 Predictive` `📥 Input-focused` `🔬 Specific` `👥 Manual` `🕰️ High Time Overhead` `💰 High Cost`
-
-
-## 🌈 Model Diversification
-Introduce diversity by incorporating different LLM models. If two models provide diametrically opposite outputs in sentiment analysis, we can consider rejecting the prompt or retrying until the outputs are similar. This technique may detect instances where an injection attack subverts one model, but fails to subvert another, resulting in diametrically opposite outputs. 
-
-`🚦 Passive` `⚠️ Reactive` `📤 Output-focused` `🌐 Generic` `🤖 Automated` `⚡ Low Time Overhead` `💰 High Cost`
-
-## 🐤 Canary Tokens
-Embed unique identifiers (canary tokens) into the prompt which should not appear in the output under normal conditions. If these tokens are detected in the output, it suggests an attack attempting to leak hidden aspects of the prompt. This technique helps to identify and mitigate such malicious activities.
-
-`🔁 Active` `🧠 Predictive` `📥 Input-focused` `🔬 Specific` `🤖 Automated` `⚡ Low Time Overhead` `💲 Low Cost`
+이 문서에 나열된 각 기술은 우회에 취약하지만, 이러한 기술을 여러 개 계층화하면 공격자가 가능한 우회 방법을 탐색하는 공간이 복잡해지고 복잡성이 추가되어 성공적인 완화에 도달할 수 있기를 바랍니다. 다중 계층 방어는 사이버 보안 영역에서 새로운 것이 아니지만, 문제의 근본적으로 해결할 수 없는 특성으로 인해 여기에서 특히 중요합니다. LLM 프롬프트 인젝션 완화 노력에서 성공할 수 있는 유일한 희망은 이러한 기술 중 여러 가지를 결합하는 것입니다.
 
 ---
 
-# 🏷️ Mitigation Categories
-It's useful to break down technique traits into categories to better understand how each technique is interacting with the threat as well as the time and cost trade-offs involved.
+# 📘 기술
 
-## 🔁 Active vs 🚦 Passive
-Active mitigation techniques involve proactive steps to neutralize a potential attack whereas passive techniques block attacks by simply not allowing them to proceed.
+## 💬 의역
+LLM에 가능한 한 많은 세부 사항을 유지하면서 프롬프트를 의역하도록 요청합니다. 인젝션 공격이 의역 단계를 속히서 초기 메시지를 반복하도록 시도할 수 있지만, 이에 필요한 정교함은 후후의 인젝션 전략과 충돌할 수 있습니다.
 
-## 🕰️ High Time Overhead vs ⚡ Low Time Overhead
-Mitigations involving LLM inputs, especially in multiple synchronous steps can require the process to take longer compared to non-LLM mitigations or single / asynchronously executed LLM prompts.
+`🔁 능동적` `📤 출력 중심` `🌐 일반` `🤖 자동화` `⚡ 낮은 시간 오버헤드` `💲 낮은 비용`
 
-## 💰 High Cost vs 💲 Low Cost
-Mitigation techniques which involve numerous additional LLM prompt steps are more resource-intensive requiring greater cost overhead relative to low cost techniques involving a single added LLM prompt or none at all.
 
-## 🛡️ Preventive vs ⚠️ Reactive
-Preventive techniques try to stop an attack before it occurs while reactive techniques respond to an attack after it has happened, mitigating the impacts.
+## 🕵️‍♂️ 위협 인텔리전스 기반 살균
+위협 인텔리전스를 기반으로 문자열 검색, 벡터 데이터베이스 및 임베딩을 사용하여 알려진 인젝션 기술과 일치시킵니다. 유사한 문자열이 감지되면 프롬프트에서 제거합니다.
 
-## 🧠 Predictive vs 🪂 Responsive
-Predictive techniques rely on modeling and forecasting to spot and stop potential attacks whereas responsive methods respond to a detected threat.
+`🔁 능동적` `🛡️ 예방적` `📥 입력 중심` `🔬 특정` `👥 수동` `⚡ 낮은 시간 오버헤드` `💰 높은 비용`
 
-## 📥 Input-focused vs 📤 Output-focused
-Input-focused techniques seek to sanitize or control the input to prevent malicious use while output-focused techniques focus on turning manipulated outputs into less valuable ones for attackers.
 
-## 🌐 Generic vs 🔬 Specific
-Generic techniques can be applied broadly to tackle different types of attacks while specific techniques specialize in thwarting a particular type of attack.
+## 🧬 변형 및 복구
+프롬프트 인젝션 문자열의 비일관적인 특성을 공격자에게 불리하게 활용합니다. 입력 프롬프트에서 무작위로 문자를 제거하고 LLM을 사용하여 텍스트의 오류를 수정합니다. 이 프로세스를 N회 반복합니다. 이 프로세스를 여러 번 병렬로 시작합니다. 충분한 반복 후 프롬프트의 복구된 부분은 인젝션과 관련된 모호한 세부 정보를 잃을 수 있습니다.
 
-## 🤖 Automated vs 👥 Manual
-Automated mitigation will continue working with no human intervention whereas manual mitigation techniques require human intervention on a continuous basis, for example to introduce new threat signatures.
+`🔁 능동적` `🛡️ 예방적` `📥 입력 중심` `🌐 일반` `🤖 자동화` `🕰️ 높은 시간 오버헤드` `💰 높은 비용`
+
+
+## 🔍 관련성 필터링
+많은 인젝션 공격에는 이상하고 관련이 없는 텍스트 문자열이 포함됩니다. LLM을 사용하여 프롬프트의 내용을 세부 정보 목록으로 나누고 각 항목의 관련성을 평가합니다. 관련 없는 것으로 간주되는 요소를 필터링하고 각 항목을 제거하면 프롬프트의 의미가 변경되는지 확인합니다. 관련 없는 구성 요소를 제거합니다. 결과적으로 정리된 프롬프트는 초기 프롬프트보다 더 강력한 버전이며, 공격자가 추가한 특정 이상 현상을 제외하고 그 영향을 방지할 수 있습니다.
+
+`🔁 능동적` `📥 입력 중심` `🌐 일반` `🤖 자동화` `🕰️ 높은 시간 오버헤드` `💰 높은 비용`
+
+
+## 🚧 유형 적용
+경우에 따라 LLM 프롬프트에 대한 엄격한 출력 형식의 유효성을 검사할 수 있습니다. 프롬프트 인젝션 공격은 종종 원격 코드 실행을 목표로 합니다. 따라서 특정 출력 형식을 보장하면 잠재적 공격자의 많은 허점을 제거하고 공격 경로를 제한합니다. 이 기술은 신뢰할 수 없거나 오염된 입력을 기반으로 하는 LLM 출력을 API 호출 및 명령과 같은 민감한 작업으로 변환할 때 특히 유용합니다.
+
+`🚦 수동적` `🛡️ 예방적` `📤 출력 중심` `🌐 일반` `👥 수동` `⚡ 낮은 시간 오버헤드` `💲 낮은 비용`
+
+
+## 🎯 미세 조정 또는 RAG 지원 인젝션 특성화
+일반적인 프롬프트 인젝션 방법에 대한 정보가 포함된 LLM 프롬프트는 이러한 기술의 징후를 식별하는 데 도움이 될 수 있습니다. 검색 증강 생성(RAG) 또는 특정 기술에 맞게 미세 조정된 모델을 사용하면 이 프로세스를 개선할 수 있습니다.
+
+`🔁 능동적` `🧠 예측적` `📥 입력 중심` `🔬 특정` `👥 수동` `🕰️ 높은 시간 오버헤드` `💰 높은 비용`
+
+
+## 🌈 모델 다양화
+다른 LLM 모델을 통합하여 다양성을 도입합니다. 두 모델이 감정 분석에서 정반대의 출력을 제공하는 경우 프롬프트를 거부하거나 출력이 유사해질 때까지 다시 시도하는 것을 고려할 수 있습니다. 이 기술은 인젝션 공격이 한 모델을 전복시키지만 다른 모델을 전복시키지 못하여 정반대의 출력이 발생하는 경우를 감지할 수 있습니다.
+
+`🚦 수동적` `⚠️ 반응적` `📤 출력 중심` `🌐 일반` `🤖 자동화` `⚡ 낮은 시간 오버헤드` `💰 높은 비용`
+
+
+## 🐤 카나리아 토큰
+정상적인 조건에서는 출력에 나타나지 않아야 하는 고유 식별자(카나리아 토큰)를 프롬프트에 포함합니다. 출력에서 이러한 토큰이 감지되면 프롬프트의 숨겨진 측면을 유출하려는 공격이 있음을 나타냅니다. 이 기술은 이러한 악의적인 활동을 식별하고 완화하는 데 도움이 됩니다.
+
+`🔁 능동적` `🧠 예측적` `📥 입력 중심` `🔬 특정` `🤖 자동화` `⚡ 낮은 시간 오버헤드` `💲 낮은 비용`
 
 ---
 
-# 📜 Relevant Literature
+# 🏷️ 완화 범주
+각 기술이 위협과 어떻게 상호 작용하는지, 그리고 관련된 시간 및 비용의 트레이드오프를 더 잘 이해하기 위해 기술 특성을 범주로 나누는 것이 유용합니다.
 
-- [Universal and Transferable Adversarial Attacks on Aligned Language Models](https://llm-attacks.org/) - Zou et al.
-- [A LLM Assisted Exploitation of AI-Guardian](https://arxiv.org/abs/2307.15008) - Nicholas Carlini, Google DeepMind
-- [A Complete List of All (arXiv) Adversarial Example Papers](https://nicholas.carlini.com/writing/2019/all-adversarial-example-papers.html) - Carlini
+
+## 🔁 능동적 vs 🚦 수동적
+능동적 완화 기술은 잠재적 공격을 무력화하기 위한 사전 예방적 조치를 포함하는 반면, 수동적 기술은 공격이 진행되지 않도록 함으로써 공격을 차단합니다.
+
+
+## 🕰️ 높은 시간 오버헤드 vs ⚡ 낮은 시간 오버헤드
+LLM 입력과 관련된 완화, 특히 여러 동기 단계에서는 LLM이 아닌 완화 또는 단일/비동기적으로 실행되는 LLM 프롬프트에 비해 프로세스에 더 오랜 시간이 걸릴 수 있습니다.
+
+
+## 💰 높은 비용 vs 💲 낮은 비용
+수많은 추가 LLM 프롬프트 단계를 포함하는 완화 기술은 단일 추가 LLM 프롬프트 또는 전혀 추가되지 않은 저비용 기술에 비해 더 많은 리소스를 많이 사용하므로 더 큰 비용 오버헤드가 발생합니다.
+
+
+## 🛡️ 예방적 vs ⚠️ 반응적
+예방적 기술은 공격이 발생하기 전에 공격을 막으려고 하는 반면, 반응적 기술은 공격 발생 후에 대응하여 영향을 완화합니다.
+
+
+## 🧠 예측적 vs 🪂 대응적
+예측적 기술은 모델링 및 예측을 사용하여 잠재적 공격을 발견하고 중지하는 반면, 대응적 방법은 감지된 위협에 대응합니다.
+
+
+## 📥 입력 중심 vs 📤 출력 중심
+입력 중심 기술은 악의적인 사용을 방지하기 위해 입력을 살균 변경하거나 제어하려고 하는 반면, 출력 중심 기술은 조작된 출력을 공격자에게 덜 가치 있는 것으로 바꾸는 데 중점을 둡니다.
+
+
+## 🌐 일반 vs 🔬 특정
+일반 기술은 다양한 유형의 공격을 처리하기 위해 광범위하게 적용할 수 있는 반면, 특정 기술은 특정 유형의 공격을 저지하는 데 특화되어 있습니다.
+
+
+## 🤖 자동화 vs 👥 수동
+자동화된 완화는 사람의 개입 없이 계속 작동하는 반면, 수동 완화 기술은 예를 들어 새로운 위협 시그니처를 도입하기 위해 지속적으로 사람의 개입이 필요합니다.
+
 
 ---
 
-# 🛠️ Free & Open Source Mitigation Suites:
+# 📜 관련 문헌
+
+- [정렬된 언어 모델에 대한 보편적이고 전이 가능한 적대적 공격](https://llm-attacks.org/) - Zou 외
+- [AI-Guardian의 LLM 지원 악용](https://arxiv.org/abs/2307.15008) - Nicholas Carlini, Google DeepMind
+- [모든 (arXiv) 적대적 예제 논문의 전체 목록](https://nicholas.carlini.com/writing/2019/all-adversarial-example-papers.html) - Carlini
+
+---
+
+# 🛠️ 무료 및 오픈 소스 완화 제품군:
 
 ### [Rebuff.ai](https://github.com/protectai/rebuff)
 
-"Rebuff is designed to protect AI applications from prompt injection (PI) attacks through a multi-layered defense."
+"Rebuff는 다중 계층 방어를 통해 AI 애플리케이션을 프롬프트 인젝션(PI) 공격으로부터 보호하도록 설계되었습니다."
+
 
 ---
 
-This is an early draft and feature-incomplete document. Contributions are welcome. I can be contacted for discussion [here](https://www.linkedin.com/in/jonathanktodd/). *Views and opinions expressed here are my own and do not represent those of my employer.*
+이 문서는 초기 초안이며 기능이 완전하지 않습니다. 기여를 환영합니다. [여기](https://www.linkedin.com/in/jonathanktodd/)에서 저에게 연락하여 논의할 수 있습니다. *여기에 표현된 견해와 의견은 저의 개인적인 것이며 제 고용주의 견해를 대변하지 않습니다.*
